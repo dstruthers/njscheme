@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Scheme</title>
+    <style type="text/css">
+#results { font-weight: bold; }
+.input { color: #777; }
+.error { color: #f44; }
+    </style>
+    <script src="scheme.js"></script>
+    <script src="jquery-1.6.2.min.js"></script>
+    <script>
+    function printObj (o) {
+	var r = "{\n";
+	for (var prop in o) {
+	    r += prop + ": " + o[prop] + "\n";
+	}
+	r += "}";
+	return r;
+    }
+
+    $(function () {
+        $("#repl").submit(function () {
+            var code = $("#prompt").val();
+            if (code) {
+                var codeDiv = $("<div class=\"input\">&gt; " + code + "</div>");
+                $("#results").prepend(codeDiv);
+                var parsed = Scheme.read(code);
+                for (var i = 0; i < parsed.length; i++) {
+                    var error = false;
+                    try {
+                        var result = Scheme.eval(parsed[i]);
+                    }
+                    catch (e) {
+                        result = e;
+                        error = true;
+                    }
+                    $(codeDiv).after($("<div class=\"result" + (error
+        ? " error" : "") + "\">" + result + "</div>"));
+                }
+                $("#prompt").val("");
+            }
+            return false;
+        });
+    });
+    </script>
+  </head>
+  <body>
+    <form id="repl">
+    <input id="prompt" type="text" style="width: 400px;" /><input type="submit" value="Eval"/>
+    </form>
+    <div id="results">
+    </div>
+  </body>
+</html>
