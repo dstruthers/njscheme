@@ -29,170 +29,199 @@ var Scheme = function () {
     SBoolean.prototype.toString = function () { return this.value ? "#T" : "#F"; };
 
     function List (items) {
-		var itemsCopy = arrayCopy(items);
-		if (!(itemsCopy instanceof Array)) {
-			this.car = itemsCopy;
-			this.cdr = null;
-		}
-		else {
-			this.car = itemsCopy.shift();
-			this.cdr = itemsCopy.length > 0 ? new List(itemsCopy) : null;
-		}
+	var itemsCopy = arrayCopy(items);
+	if (!(itemsCopy instanceof Array)) {
+	    this.car = itemsCopy;
+	    this.cdr = null;
+	}
+	else {
+	    this.car = itemsCopy.shift();
+	    this.cdr = itemsCopy.length > 0 ? new List(itemsCopy) : null;
+	}
     }
     List.prototype.toString = function () {
-		function tostring (list) {
-			return list.car + (list.cdr !== null ? " " + tostring(list.cdr) : "");
-		}
-		return "(" + tostring(this) + ")";
+	function tostring (list) {
+	    return list.car + (list.cdr !== null ? " " + tostring(list.cdr) : "");
+	}
+	return "(" + tostring(this) + ")";
     };
     List.prototype.get = function (offset) {
-		if (offset === 0) {
-			return this.car;
-		}
-		else {
-			return this.cdr.get(offset - 1);
-		}
+	if (offset === 0) {
+	    return this.car;
+	}
+	else {
+	    return this.cdr.get(offset - 1);
+	}
     }
 
     // Environment
 
     function Env (parent) {
-		this.bindings = {};
+	this.bindings = {};
     }
     Env.prototype.lookup = function (name) {
-		if (this.bindings[name] !== undefined) {
-			return this.bindings[name];
-		}
-		else if (this.parent) {
-			return this.parent.lookup(name);
-		}
-		else {
-			throw "Unbound variable: " + name;
-		}
+	if (this.bindings[name] !== undefined) {
+	    return this.bindings[name];
+	}
+	else if (this.parent) {
+	    return this.parent.lookup(name);
+	}
+	else {
+	    throw "Unbound variable: " + name;
+	}
     };
 
-    // Virtual Machine / compilation
-	var primitiveFunctionCount = 0;
-    function PrimitiveFunction (fn) {
-		this.fn = fn;
-		this.id = ++primitiveFunctionCount;
+    // Closures
+
+    function Closure (env, vars, body) {
+	this.env = env;
+	this.vars = vars;
+	this.body = body;
     }
-	PrimitiveFunction.prototype.toString = function () {
-		return "#[procedure " + this.id + "]";
-	};
+    Closure.prototype.toString = function () { return "#[Lexical closure]"; };
+
+    // Virtual Machine / compilation
+    var primitiveFunctionCount = 0;
+    function PrimitiveFunction (fn) {
+	this.fn = fn;
+	this.id = ++primitiveFunctionCount;
+    }
+    PrimitiveFunction.prototype.toString = function () {
+	return "#[procedure " + this.id + "]";
+    };
 
     function VirtualMachine () {
-		this.acc = null;
-		this.next = null;
-		this.env = new Env();
+	this.acc = null;
+	this.next = null;
+	this.env = new Env();
 
-		var vm = this;
+	var vm = this;
 
-		this.env.bindings["CAR"] = new PrimitiveFunction(function (form, next) {
-			var list = form.get(1);
-			return vm.compile(list, { op: "car", next: next });
-		});
-		this.env.bindings["CDR"] = new PrimitiveFunction(function (form, next) {
-			var list = form.get(1);
-			return vm.compile(list, { op: "cdr", next: next });
-		});
-		this.env.bindings["DEFINE"] = new PrimitiveFunction(function (form, next) {
-			var name = form.get(1);
-			var value = form.get(2);
+	this.env.bindings["CAR"] = new PrimitiveFunction(function (form, next) {
+	    var list = form.get(1);
+	    return vm.compile(list, { op: "car", next: next });
+	});
+	this.env.bindings["CDR"] = new PrimitiveFunction(function (form, next) {
+	    var list = form.get(1);
+	    return vm.compile(list, { op: "cdr", next: next });
+	});
+	this.env.bindings["DEFINE"] = new PrimitiveFunction(function (form, next) {
+	    var name = form.get(1);
+	    var value = form.get(2);
 
-			return vm.compile(value,
-							  { op: 'assign',
-								name: name,
-								next: next
-							  });
-		});
-		this.env.bindings["IF"] = new PrimitiveFunction(function (form, next) {
-			var test = form.get(1);
-			var consequent = form.get(2);
-			var alternative = form.get(3);
+	    return vm.compile(value,
+			      { op: 'assign',
+				name: name,
+				next: next
+			      });
+	});
+	this.env.bindings["IF"] = new PrimitiveFunction(function (form, next) {
+	    var test = form.get(1);
+	    var consequent = form.get(2);
+	    var alternative = form.get(3);
 
-			return vm.compile(test,
-							  { op: "test",
-								consequent: vm.compile(consequent, next),
-								alternative: vm.compile(alternative, next)
-							  }
-							 );
-		});
-		this.env.bindings["QUOTE"] = new PrimitiveFunction(function (form, next) {
-			var quote = form.get(1);
-			return { op: 'constant', val: quote, next: next };
-		});
+	    return vm.compile(test,
+			      { op: "test",
+				consequent: vm.compile(consequent, next),
+				alternative: vm.compile(alternative, next)
+			      }
+			     );
+	});
+	this.env.bindings["LAMBDA"] = new PrimitiveFunction(function (form, next) {
+	    var params = form.get(1);
+	    var body = form.get(2);
+
+	    return { op: "closure",
+		     vars: params,
+		     body: vm.compile(body, { op: "return" }),
+		     next: next
+		   };
+	});
+	this.env.bindings["QUOTE"] = new PrimitiveFunction(function (form, next) {
+	    var quote = form.get(1);
+	    return { op: 'constant', val: quote, next: next };
+	});
     }
     VirtualMachine.prototype.compile = function (form, next) {
-		if (form instanceof List) {
-			var fn = form.car;
+	if (form instanceof List) {
+	    var fn = form.car;
 
-			if (fn instanceof Symbol) {
-				var fnBinding = this.env.lookup(fn.toString());
-				if (fnBinding instanceof PrimitiveFunction) {
-					return fnBinding.fn(form, next);
-				}
-			}
+	    if (fn instanceof Symbol) {
+		var fnBinding = this.env.lookup(fn.toString());
+		if (fnBinding instanceof PrimitiveFunction) {
+		    return fnBinding.fn(form, next);
 		}
-		else if (isConstant(form)) {
-			return { op: "constant",
-					 val: form,
-					 next: next
-				   };
-		}
-		else if (form instanceof Symbol) {
-			return { op: "lookup",
-					 name: form,
-					 next: next
-				   };
-		}
-		else {
-			throw "Error during compilation";
-		}
+	    }
+	    else {
+		return vm.compile(fn, { op: "apply",
+					next: next
+				      });
+	    }
+	}
+	else if (isConstant(form)) {
+	    return { op: "constant",
+		     val: form,
+		     next: next
+		   };
+	}
+	else if (form instanceof Symbol) {
+	    return { op: "lookup",
+		     name: form,
+		     next: next
+		   };
+	}
+	else {
+	    throw "Error during compilation";
+	}
     };
 
     VirtualMachine.prototype.exec = function (code) {
-		this.next = code;
-		while (true) {
-			var inst= this.next;
+	this.next = code;
+	while (true) {
+	    var inst= this.next;
 
-			switch (inst.op) {
-			case "assign":
-				this.env.bindings[inst.name] = this.acc;
-				this.next = inst.next;
-				continue;
+	    switch (inst.op) {
+	    case "assign":
+		this.env.bindings[inst.name] = this.acc;
+		this.next = inst.next;
+		continue;
 
-			case "car":
-				this.acc = this.acc.car;
-				this.next = inst.next;
-				continue;
+	    case "car":
+		this.acc = this.acc.car;
+		this.next = inst.next;
+		continue;
 
-			case "cdr":
-				this.acc = this.acc.cdr;
-				this.next = inst.next;
-				continue;
+	    case "cdr":
+		this.acc = this.acc.cdr;
+		this.next = inst.next;
+		continue;
 
-			case "constant":
-				this.acc = inst.val;
-				this.next = inst.next;
-				continue;
+	    case "closure":
+		this.acc = new Closure(this.env, inst.vars, inst.body);
+		this.next = inst.next;
+		continue;
 
-			case "halt":
-				return this.acc;
+	    case "constant":
+		this.acc = inst.val;
+		this.next = inst.next;
+		continue;
 
-			case "lookup":
-				this.acc = this.env.lookup(inst.name);
-				this.next = inst.next;
-				continue;
+	    case "halt":
+		return this.acc;
 
-			case "test":
-				this.next = isTrue(this.acc) ? inst.consequent : inst.alternative;
-				continue;
+	    case "lookup":
+		this.acc = this.env.lookup(inst.name);
+		this.next = inst.next;
+		continue;
 
-			default:
-				throw "Unknown instruction: " + inst.op;
-			}
-		}
+	    case "test":
+		this.next = isTrue(this.acc) ? inst.consequent : inst.alternative;
+		continue;
+
+	    default:
+		throw "Unknown instruction: " + inst.op;
+	    }
+	}
     };
 
     // Parsing
