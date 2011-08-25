@@ -4,29 +4,29 @@ var Scheme = function () {
     // Built-in Scheme types
 
     function Symbol (name) {
-		this.name = new String(name);
+	this.name = new String(name);
     }
     Symbol.prototype.toString = function () { return this.name.toUpperCase(); };
 
     function SNumber (n) {
-		this.value = new Number(n);
+	this.value = new Number(n);
     }
     SNumber.prototype.toString = function () { return this.value.toString(); };
 
     function SString (s) {
-		this.value = new String(s);
+	this.value = new String(s);
     }
     SString.prototype.toString = function () { return "\"" + this.value + "\""; };
 
     function SBoolean (b) {
-		if (typeof(b) === "string") {
-			this.value = (b.toLowerCase() === "#f") ? false : true;
-		}
-		else {
-			this.value = new Boolean(b);
-		}
+	if (typeof(b) === "string") {
+	    this.value = (b.toLowerCase() === "#f") ? false : true;
+	}
+	else {
+	    this.value = new Boolean(b);
+	}
     }
-    SBoolean.prototype.toString = function () { return this.value ? "#T" : "#F"; };
+    SBoolean.prototype.toString = function () { return this.value.valueOf() ? "#T" : "#F"; };
 
     function List (items) {
 	var itemsCopy = arrayCopy(items);
@@ -41,7 +41,7 @@ var Scheme = function () {
     }
     List.prototype.toString = function () {
 	function tostring (list) {
-	    return list.car + (list.cdr !== null ? " " + tostring(list.cdr) : "");
+	    return (list.car !== null && list.car !== undefined ? list.car + (list.cdr !== null ? " " + tostring(list.cdr) : "") : "");
 	}
 	return "(" + tostring(this) + ")";
     };
@@ -53,6 +53,14 @@ var Scheme = function () {
 	    return this.cdr.get(offset - 1);
 	}
     }
+    List.prototype.length = function () {
+	if (this.cdr instanceof List) {
+	    return 1 + this.cdr.length();
+	}
+	else {
+	    return this.car == null ? 0 : 1;
+	}
+    };
 
     // Environment
 
@@ -94,8 +102,24 @@ var Scheme = function () {
 	this.acc = null;
 	this.next = null;
 	this.env = new Env();
+	this.args = [];
+	this.stack = null;
 
 	var vm = this;
+
+	this.env.bindings["CALL-WITH-CURRENT-CONTINUATION"] = new PrimitiveFunction(function (form, next) {
+	    var fn = form.get(1);
+	    var compiled = { op: "conti",
+			     next: { op: "argument",
+				     next: vm.compile(fn, { op: "apply" })
+				   }
+			   };
+	    // TODO: add TCO
+	    return { op: "frame",
+		     ret: next,
+		     next: compiled
+		   };
+	});
 
 	this.env.bindings["CAR"] = new PrimitiveFunction(function (form, next) {
 	    var list = form.get(1);
@@ -137,6 +161,20 @@ var Scheme = function () {
 		     next: next
 		   };
 	});
+	this.env.bindings["NOT"] = new PrimitiveFunction(function (form, next) {
+	    var arg = form.get(1);
+	    return vm.compile(arg, { op: "not",
+				     next: next
+				   }
+			     );
+	});
+	this.env.bindings["NULL?"] = new PrimitiveFunction(function (form, next) {
+	    var arg = form.get(1);
+	    return vm.compile(arg, { op: "isnull",
+				     next: next
+				   }
+			     );
+	});
 	this.env.bindings["QUOTE"] = new PrimitiveFunction(function (form, next) {
 	    var quote = form.get(1);
 	    return { op: 'constant', val: quote, next: next };
@@ -147,16 +185,34 @@ var Scheme = function () {
 	    var fn = form.car;
 
 	    if (fn instanceof Symbol) {
-		var fnBinding = this.env.lookup(fn.toString());
-		if (fnBinding instanceof PrimitiveFunction) {
-		    return fnBinding.fn(form, next);
+		try {
+		    var fnBinding = this.env.lookup(fn.toString());
+		    if (fnBinding instanceof PrimitiveFunction) {
+			return fnBinding.fn(form, next);
+		    }
+		}
+		catch (e) {
 		}
 	    }
-	    else {
-		return vm.compile(fn, { op: "apply",
-					next: next
-				      });
+	    
+	    // otherwise assume application
+	    var argCount = form.length() - 1;
+	    var vm = this;
+
+	    function comp (compiled, i) {
+		if (i === argCount) {
+		    // TODO: add TCO
+		    return { op: "frame",
+			     ret: next,
+			     next: compiled
+			   };
+		}
+		else {
+		    return comp(vm.compile(form.get(i + 1), { op: "argument", next: compiled }), i + 1);
+		}
 	    }
+	    return comp(this.compile(fn, { op: "apply", next: next }), 0);
+
 	}
 	else if (isConstant(form)) {
 	    return { op: "constant",
@@ -181,6 +237,22 @@ var Scheme = function () {
 	    var inst= this.next;
 
 	    switch (inst.op) {
+	    case "apply":
+		var env = new Env(this.acc.env);
+		for (var i = 0; i < this.acc.vars.length(); i++) {
+		    var varName = this.acc.vars.get(i).toString();
+		    var varVal = this.args.pop();
+		    env.bindings[varName] = varVal;
+		}
+		this.env = env;
+		this.next = this.acc.body;
+		continue;
+
+	    case "argument":
+		this.args.push(this.acc);
+		this.next = inst.next;
+		continue;
+
 	    case "assign":
 		this.env.bindings[inst.name] = this.acc;
 		this.next = inst.next;
@@ -206,12 +278,61 @@ var Scheme = function () {
 		this.next = inst.next;
 		continue;
 
-	    case "halt":
+	    case "conti":
+		this.acc = new Closure(new Env(),
+				       new List([new Symbol("v")]),
+				       { op: "nuate",
+					 name: "V",
+					 stack: this.stack
+				       });
+		this.next = inst.next;
+		continue;
+
+	    case "finish":
 		return this.acc;
+
+	    case "frame":
+		this.stack = { next: inst.ret,
+			       env: this.env,
+			       args: this.args,
+			       stack: this.stack
+			     };
+		this.args = [];
+		this.next = inst.next;
+		continue;
+
+	    case "isnull":
+		this.acc = new SBoolean(isNull(this.acc));
+		this.next = inst.next;
+		continue;
 
 	    case "lookup":
 		this.acc = this.env.lookup(inst.name);
 		this.next = inst.next;
+		continue;
+
+	    case "not":
+		if (!(this.acc instanceof SBoolean)) {
+		    var result = new SBoolean(false);
+		}
+		else {
+		    var result = new SBoolean(!this.acc.value.valueOf());
+		}
+		this.acc = result;
+		this.next = inst.next;
+		continue;
+
+	    case "nuate":
+		this.acc = this.env.lookup(inst.name);
+		this.next = { op: "return" };
+		this.stack = inst.stack;
+		continue;
+
+	    case "return":
+		this.next = this.stack.next;
+		this.env = this.stack.env;
+		this.args = this.stack.args;
+		this.stack = this.stack.stack;
 		continue;
 
 	    case "test":
@@ -290,6 +411,13 @@ var Scheme = function () {
             return [];
         }
 
+	// Syntactic sugar
+	else if (token instanceof QuoteToken) {
+            var contents = [new Symbol("quote")];
+            contents = contents.concat(parse(tokens, 1));
+            return [new List(contents)].concat(parse(tokens, limit - 1));
+	}
+
         // Ignore comments
         else if (token instanceof CommentToken) {
             return parse(tokens, limit);
@@ -305,17 +433,17 @@ var Scheme = function () {
     // utility functions
 
     function isConstant (atom) {
-		return atom instanceof SString
-			|| atom instanceof SNumber
-			|| atom instanceof SBoolean;
+	return atom instanceof SString
+	    || atom instanceof SNumber
+	    || atom instanceof SBoolean;
     }
 
     function isTrue (atom) {
-		return !(atom instanceof SBoolean) || atom.value !== false;
+	return !(atom instanceof SBoolean) || atom.value !== false;
     }
 
-    function isApplicable (obj) {
-		return obj instanceof PrimitiveFunction;
+    function isNull (list) {
+	return list instanceof List && (list.car === null || list.car === undefined);
     }
 
     function arrayCopy (a) {
@@ -350,7 +478,7 @@ var Scheme = function () {
     }
 
     function schemeEval (form) {
-		var compiled = vm.compile(form, {op: 'halt'});
+		var compiled = vm.compile(form, {op: 'finish'});
 		if (DEBUG) {
 			console.log("Result of compilation:");
 			console.log(compiled);
