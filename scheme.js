@@ -89,13 +89,11 @@ var Scheme = function () {
     Closure.prototype.toString = function () { return "#[Lexical closure]"; };
 
     // Virtual Machine / compilation
-    var primitiveFunctionCount = 0;
     function PrimitiveFunction (fn) {
 	this.fn = fn;
-	this.id = ++primitiveFunctionCount;
     }
     PrimitiveFunction.prototype.toString = function () {
-	return "#[procedure " + this.id + "]";
+	return "#[Primitive procedure]";
     };
 
     function VirtualMachine () {
@@ -114,11 +112,15 @@ var Scheme = function () {
 				     next: vm.compile(fn, { op: "apply" })
 				   }
 			   };
-	    // TODO: add TCO
-	    return { op: "frame",
-		     ret: next,
-		     next: compiled
-		   };
+	    if (next.op === "return") {
+		return compiled;
+	    }
+	    else {
+		return { op: "frame",
+			 ret: next,
+			 next: compiled
+		       };
+	    }
 	});
 
 	this.env.bindings["CAR"] = new PrimitiveFunction(function (form, next) {
@@ -196,16 +198,21 @@ var Scheme = function () {
 	    }
 	    
 	    // otherwise assume application
+	    console.log("test");
 	    var argCount = form.length() - 1;
 	    var vm = this;
 
 	    function comp (compiled, i) {
 		if (i === argCount) {
-		    // TODO: add TCO
-		    return { op: "frame",
-			     ret: next,
-			     next: compiled
-			   };
+		    if (next.op === "return") {
+			return compiled;
+		    }
+		    else {
+			return { op: "frame",
+				 ret: next,
+				 next: compiled
+			       };
+		    }
 		}
 		else {
 		    return comp(vm.compile(form.get(i + 1), { op: "argument", next: compiled }), i + 1);
