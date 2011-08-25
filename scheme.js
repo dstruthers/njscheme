@@ -123,6 +123,28 @@ var Scheme = function () {
 	    }
 	});
 
+	this.env.bindings["+"] = new PrimitiveFunction(function (form, next) {
+	    console.log("Compiling +");
+	    var argCount = form.length() - 1;
+
+	    function comp (compiled, i) {
+		if (i === argCount) {
+		    if (next.op === "return") {
+			return compiled;
+		    }
+		    else {
+			return { op: "frame",
+				 ret: next,
+				 next: compiled
+			       };
+		    }
+		}
+		else {
+		    return comp(vm.compile(form.get(i + 1), { op: "argument", next: compiled }), i + 1);
+		}
+	    }
+	    return comp({ op: "add", next: next }, 0);
+	});
 	this.env.bindings["CAR"] = new PrimitiveFunction(function (form, next) {
 	    var list = form.get(1);
 	    return vm.compile(list, { op: "car", next: next });
@@ -198,7 +220,6 @@ var Scheme = function () {
 	    }
 	    
 	    // otherwise assume application
-	    console.log("test");
 	    var argCount = form.length() - 1;
 	    var vm = this;
 
@@ -244,6 +265,22 @@ var Scheme = function () {
 	    var inst= this.next;
 
 	    switch (inst.op) {
+	    case "add":
+		var addAcc = 0;
+		while (true) {
+		    var n = this.args.pop();
+		    if (n === undefined) {
+			break;
+		    }
+		    if (!(n instanceof SNumber)) {
+			throw "Cannot add non-numeric term " + n.toString();
+		    }
+		    addAcc += n.value.valueOf();
+		}
+		this.acc = addAcc;
+		this.next = inst.next;
+		continue;
+
 	    case "apply":
 		var env = new Env(this.acc.env);
 		for (var i = 0; i < this.acc.vars.length(); i++) {
@@ -277,6 +314,16 @@ var Scheme = function () {
 
 	    case "closure":
 		this.acc = new Closure(this.env, inst.vars, inst.body);
+		this.next = inst.next;
+		continue;
+
+	    case "cons":
+		var head = inst.elem;
+		var tail = inst.list;
+		var list = new List();
+		list.car = head;
+		list.cdr = tail;
+		this.acc = list;
 		this.next = inst.next;
 		continue;
 
@@ -454,61 +501,73 @@ var Scheme = function () {
     }
 
     function arrayCopy (a) {
-		var b = [];
-		for (var i = 0; i < a.length; i++) {
-			if (a[i] instanceof Array) {
-				b[i] = arrayCopy(a[i]);
-			}
-			else {
-				b[i] = a[i];
-			}
-		}
-		return b;
+	var b = [];
+	for (var i = 0; i < a.length; i++) {
+	    if (a[i] instanceof Array) {
+		b[i] = arrayCopy(a[i]);
+	    }
+	    else {
+		b[i] = a[i];
+	    }
+	}
+	return b;
     }
 
     function printObj (o) {
-		var r = "{\n";
-		for (var prop in o) {
-			r += prop + ": " + o[prop] + "\n";
-		}
-		r += "}";
-		return r;
+	var r = "{\n";
+	for (var prop in o) {
+	    r += prop + ": " + o[prop] + "\n";
+	}
+	r += "}";
+	return r;
     }
 
     // REPL
     var vm = new VirtualMachine();
 
+    function run (code) {
+	var tokens = tokenize(code);
+	var parsed = parse(tokens);
+	for (var i = 0; i < parsed.length; i++) {
+	    var compiled = vm.compile(parsed[i], { op: "finish" });
+	    vm.exec(compiled);
+	}
+    }
+
     function schemeRead (str) {
-		var tokens = tokenize(str);
-		var parsed = parse(tokens);
-		return parsed;
+	var tokens = tokenize(str);
+	var parsed = parse(tokens);
+	return parsed;
     }
 
     function schemeEval (form) {
-		var compiled = vm.compile(form, {op: 'finish'});
-		if (DEBUG) {
-			console.log("Result of compilation:");
-			console.log(compiled);
-		}
-		var result = vm.exec(compiled);
-		if (DEBUG) {
-			console.log("New envioronment:");
-			console.log(vm.env);
-		}
-		return result;
+	var compiled = vm.compile(form, {op: 'finish'});
+	if (DEBUG) {
+	    console.log("Result of compilation:");
+	    console.log(compiled);
+	}
+	var result = vm.exec(compiled);
+	if (DEBUG) {
+	    console.log("New environment:");
+	    console.log(vm.env);
+	}
+	return result;
     }
 
+    // some shortcuts
+    run("(define call/cc call-with-current-continuation)");
+
     return {
-		Env: Env,
-		VirtualMachine: VirtualMachine,
-		Symbol: Symbol,
-		String: SString,
-		Number: SNumber,
-		Boolean: SBoolean,
-		List: List,
-		tokenize: tokenize,
-		parse: parse,
-		read: schemeRead,
-		eval: schemeEval
+	Env: Env,
+	VirtualMachine: VirtualMachine,
+	Symbol: Symbol,
+	String: SString,
+	Number: SNumber,
+	Boolean: SBoolean,
+	List: List,
+	tokenize: tokenize,
+	parse: parse,
+	read: schemeRead,
+	eval: schemeEval
     };
 }();
