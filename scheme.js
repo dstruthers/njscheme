@@ -96,35 +96,8 @@ var Scheme = function () {
 	return "#[Primitive procedure]";
     };
 
-    function VirtualMachine () {
-	this.acc = null;
-	this.next = null;
-	this.env = new Env();
-	this.args = [];
-	this.stack = null;
-
-	var vm = this;
-
-	this.env.bindings["CALL-WITH-CURRENT-CONTINUATION"] = new PrimitiveFunction(function (form, next) {
-	    var fn = form.get(1);
-	    var compiled = { op: "conti",
-			     next: { op: "argument",
-				     next: vm.compile(fn, { op: "apply" })
-				   }
-			   };
-	    if (next.op === "return") {
-		return compiled;
-	    }
-	    else {
-		return { op: "frame",
-			 ret: next,
-			 next: compiled
-		       };
-	    }
-	});
-
-	this.env.bindings["+"] = new PrimitiveFunction(function (form, next) {
-	    console.log("Compiling +");
+    function PrimitiveApplicable (op) {
+	this.fn = function (form, next) {
 	    var argCount = form.length() - 1;
 
 	    function comp (compiled, i) {
@@ -143,7 +116,40 @@ var Scheme = function () {
 		    return comp(vm.compile(form.get(i + 1), { op: "argument", next: compiled }), i + 1);
 		}
 	    }
-	    return comp({ op: "add", next: next }, 0);
+	    return comp({ op: op, next: { op: "return", next: next } }, 0);
+	}
+    }
+    PrimitiveApplicable.prototype.toString = function () { return "#[Primitive procedure]"; };
+
+    function VirtualMachine () {
+	this.acc = null;
+	this.next = null;
+	this.env = new Env();
+	this.args = [];
+	this.stack = null;
+
+	var vm = this;
+
+	this.env.bindings["+"] = new PrimitiveApplicable("add");
+	this.env.bindings["-"] = new PrimitiveApplicable("subtract");
+	this.env.bindings["*"] = new PrimitiveApplicable("multiply");
+	this.env.bindings["="] = new PrimitiveApplicable("equal-numer");
+	this.env.bindings["CALL-WITH-CURRENT-CONTINUATION"] = new PrimitiveFunction(function (form, next) {
+	    var fn = form.get(1);
+	    var compiled = { op: "conti",
+			     next: { op: "argument",
+				     next: vm.compile(fn, { op: "apply" })
+				   }
+			   };
+	    if (next.op === "return") {
+		return compiled;
+	    }
+	    else {
+		return { op: "frame",
+			 ret: next,
+			 next: compiled
+		       };
+	    }
 	});
 	this.env.bindings["CAR"] = new PrimitiveFunction(function (form, next) {
 	    var list = form.get(1);
@@ -211,7 +217,7 @@ var Scheme = function () {
 	    if (fn instanceof Symbol) {
 		try {
 		    var fnBinding = this.env.lookup(fn.toString());
-		    if (fnBinding instanceof PrimitiveFunction) {
+		    if (isApplicable(fnBinding)) {
 			return fnBinding.fn(form, next);
 		    }
 		}
@@ -277,7 +283,7 @@ var Scheme = function () {
 		    }
 		    addAcc += n.value.valueOf();
 		}
-		this.acc = addAcc;
+		this.acc = new SNumber(addAcc);
 		this.next = inst.next;
 		continue;
 
@@ -342,6 +348,31 @@ var Scheme = function () {
 		this.next = inst.next;
 		continue;
 
+	    case "equal-numer":
+		var equalAcc = null;
+		var equal = true;
+		while (true) {
+		    var n = this.args.pop();
+		    if (n === undefined) {
+			break;
+		    }
+		    if (!(n instanceof SNumber)) {
+			throw "Cannot compare non-numeric term " + n.toString();
+		    }
+		    if (equalAcc === null) {
+			equalAcc = n.value.valueOf();
+		    }
+		    else {
+			if (n.value.valueOf() !== equalAcc) {
+			    equal = false;
+			    break;
+			}
+		    }
+		}
+		this.acc = new SBoolean(equal);
+		this.next = inst.next;
+		continue;
+
 	    case "finish":
 		return this.acc;
 
@@ -362,6 +393,22 @@ var Scheme = function () {
 
 	    case "lookup":
 		this.acc = this.env.lookup(inst.name);
+		this.next = inst.next;
+		continue;
+
+	    case "multiply":
+		var multAcc = 1;
+		while (true) {
+		    var n = this.args.pop();
+		    if (n === undefined) {
+			break;
+		    }
+		    if (!(n instanceof SNumber)) {
+			throw "Cannot multiply non-numeric term " + n.toString();
+		    }
+		    multAcc *= n.value.valueOf();
+		}
+		this.acc = new SNumber(multAcc);
 		this.next = inst.next;
 		continue;
 
@@ -387,6 +434,27 @@ var Scheme = function () {
 		this.env = this.stack.env;
 		this.args = this.stack.args;
 		this.stack = this.stack.stack;
+		continue;
+
+	    case "subtract":
+		var subAcc = null;
+		while (true) {
+		    var n = this.args.pop();
+		    if (n === undefined) {
+			break;
+		    }
+		    if (!(n instanceof SNumber)) {
+			throw "Cannot subtract non-numeric term " + n.toString();
+		    }
+		    if (subAcc === null) {
+			subAcc = n.value.valueOf();
+		    }
+		    else {
+			subAcc -= n.value.valueOf();
+		    }
+		}
+		this.acc = new SNumber(subAcc);
+		this.next = inst.next;
 		continue;
 
 	    case "test":
@@ -427,7 +495,7 @@ var Scheme = function () {
             [Symbol,                /^([^\(\)\[\]\"\s]+)/     ]
         ];
 
-        code = code.replace(/^[\s\n]*/, "") + " ";//.replace(/\s*$/, "");                                                              
+        code = code.replace(/^[\s\n]*/, "") + " ";
         for (var i = 0; i < token_types.length; i++) {
             if (matches = code.match(token_types[i][1])) {
                 var replacement = matches.length > 2
@@ -498,6 +566,10 @@ var Scheme = function () {
 
     function isNull (list) {
 	return list instanceof List && (list.car === null || list.car === undefined);
+    }
+
+    function isApplicable (obj) {
+	return obj.fn && typeof(obj.fn) === "function";
     }
 
     function arrayCopy (a) {
