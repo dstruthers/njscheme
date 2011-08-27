@@ -66,6 +66,7 @@ var Scheme = function () {
 
     function Env (parent) {
 	this.bindings = {};
+		this.parent = parent;
     }
     Env.prototype.lookup = function (name) {
 	if (this.bindings[name] !== undefined) {
@@ -561,7 +562,7 @@ var Scheme = function () {
     }
 
     function isTrue (atom) {
-	return !(atom instanceof SBoolean) || atom.value !== false;
+		return !(atom instanceof SBoolean) || atom.value.valueOf() !== false;
     }
 
     function isNull (list) {
