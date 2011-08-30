@@ -36,8 +36,12 @@
                         result = e;
                         error = true;
                     }
-                    $(codeDiv).after($("<div class=\"result" + (error
-        ? " error" : "") + "\">" + result + "</div>"));
+                    try {
+                        $(codeDiv).after($("<div class=\"result" + (error ? " error" : "") + "\">" + result + "</div>"));
+                    }
+                    catch (e) {
+                        alert(e);
+                    }
                 }
                 $("#prompt").val("");
             }
