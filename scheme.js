@@ -109,6 +109,7 @@ var Scheme = function () {
     };
 
     function PrimitiveFunction (op) {
+	this.op = op;
 	this.fn = function (form, next) {
 	    var argCount = form.length() - 1;
 
@@ -320,13 +321,8 @@ var Scheme = function () {
 		continue;
 
 	    case "apply":
-		if (this.acc instanceof PrimitiveOperator) {
-		    // this shouldn't be allowed to happen, but it is.
-		    // Example:
-		    // ((compose not odd?) 1)
-
-		    var vars = varList(this.args.length);
-		    //var closure = new Closure(this.env, vars, 
+		if (!(this.acc instanceof Closure)) {
+		    throw "Cannot apply non-closure object: " + this.acc;
 		}
 		var env = new Env(this.acc.env);
 		
@@ -521,7 +517,14 @@ var Scheme = function () {
 		continue;
 
 	    case "lookup":
-		this.acc = this.env.lookup(inst.name);
+		var val = this.env.lookup(inst.name);
+		if (val instanceof PrimitiveFunction) {
+		    if (inst.next.op === "apply") {
+			this.next = { op: val.op, next: inst.next.next };
+			continue;
+		    }
+		}
+		this.acc = val;
 		this.next = inst.next;
 		continue;
 
