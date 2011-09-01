@@ -105,7 +105,7 @@ var Scheme = function () {
 	this.fn = fn;
     }
     SpecialForm.prototype.toString = function () {
-	return "#[Primitive operator]";
+	return "#[Special form]";
     };
 
     // PrimitiveFunction should be phased out in favor of Closure objects created by createFunction()
@@ -223,6 +223,18 @@ var Scheme = function () {
 		     next: next
 		   };
 	});
+/*
+	this.env.bindings["LET"] = new SpecialForm(function (form, next) {
+	    var bindings = form.get(1);
+	    var body = form.get(2);
+
+	    var vars = [];
+	    var vals = [];
+	    for (var i = 0; i < bindings.length(); i++) {
+		vars.push(bindings.get(i).get(0));
+	    }
+	});
+*/
 	this.env.bindings["QUOTE"] = new SpecialForm(function (form, next) {
 	    var quote = form.get(1);
 	    return { op: 'constant', val: quote, next: next };
@@ -856,6 +868,7 @@ var Scheme = function () {
     // basic numeric functions
     run("(define 1+ (lambda (n) (+ n 1)))");
     run("(define 1- (lambda (n) (- n 1)))");
+    run("(define range (lambda (start end) (if (> start end) '() (cons start (range (1+ start) end)))))");
 
     // numeric tests
     run("(define zero? (lambda (n) (= n 0)))");
@@ -868,9 +881,6 @@ var Scheme = function () {
     run("(define filter (lambda (f l) (if (null? l) '() (if (f (car l)) (cons (car l) (filter f (cdr l))) (filter f (cdr l))))))");
     run("(define take (lambda (n l) (if (zero? n) '() (cons (car l) (take (1- n) (cdr l))))))");
     run("(define drop (lambda (n l) (if (zero? n) l (drop (1- n) (cdr l)))))");
-
-    // functional programming
-    run("(define compose (lambda (f g) (lambda (x) (f (g x)))))");
 
     return {
 	Env: Env,
@@ -886,6 +896,7 @@ var Scheme = function () {
 	eval: schemeEval,
 	run: run,
 	saveState: saveState,
-	restoreState: restoreState
+	restoreState: restoreState,
+	version: function () { return "njScheme 0.1"; }
     };
 }();

@@ -11,16 +11,8 @@
     <script src="scheme.js"></script>
     <script src="jquery-1.6.2.min.js"></script>
     <script>
-    function printObj (o) {
-	var r = "{\n";
-	for (var prop in o) {
-	    r += prop + ": " + o[prop] + "\n";
-	}
-	r += "}";
-	return r;
-    }
-
     $(function () {
+        $("#results").prepend("<div class=\"input\" style=\"font-style: italic;\">;; " + Scheme.version() + "</div>");
         $("#repl").submit(function () {
             var code = $("#prompt").val();
             if (code) {
@@ -38,12 +30,7 @@
                         error = true;
                         Scheme.restoreState(state);
                     }
-                    try {
-                        $(codeDiv).after($("<div class=\"result" + (error ? " error" : "") + "\">" + result + "</div>"));
-                    }
-                    catch (e) {
-                        alert(e);
-                    }
+                    $(codeDiv).after($("<div class=\"result" + (error ? " error" : "") + "\">" + result + "</div>"));
                 }
                 $("#prompt").val("");
             }
