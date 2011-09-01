@@ -101,13 +101,15 @@ var Scheme = function () {
     Closure.prototype.toString = function () { return "#[Lexical closure]"; };
 
     // Virtual Machine / compilation
-    function PrimitiveOperator (fn) {
+    function SpecialForm (fn) {
 	this.fn = fn;
     }
-    PrimitiveOperator.prototype.toString = function () {
+    SpecialForm.prototype.toString = function () {
 	return "#[Primitive operator]";
     };
 
+    // PrimitiveFunction should be phased out in favor of Closure objects created by createFunction()
+    // or macros (as yet not implemented)
     function PrimitiveFunction (op) {
 	this.op = op;
 	this.fn = function (form, next) {
@@ -170,8 +172,9 @@ var Scheme = function () {
 	this.env.bindings["LIST"] = new PrimitiveFunction("list");
 	this.env.bindings["MODULO"] = createFunction(new List([new Symbol("a"), new Symbol("b")]), "modulo");
 	this.env.bindings["NOT"] = createFunction(new List([new Symbol("b")]), "not");
+	this.env.bindings["NULL?"] = createFunction(new List([new Symbol("l")]), "isnull");
 
-	this.env.bindings["CALL-WITH-CURRENT-CONTINUATION"] = new PrimitiveOperator(function (form, next) {
+	this.env.bindings["CALL-WITH-CURRENT-CONTINUATION"] = new SpecialForm(function (form, next) {
 	    var fn = form.get(1);
 	    var compiled = { op: "conti",
 			     next: { op: "argument",
@@ -188,16 +191,7 @@ var Scheme = function () {
 		       };
 	    }
 	});
-/*	this.env.bindings["CAR"] = new PrimitiveOperator(function (form, next) {
-	    var list = form.get(1);
-	    return vm.compile(list, { op: "car", next: next });
-	});
-	this.env.bindings["CDR"] = new PrimitiveOperator(function (form, next) {
-	    var list = form.get(1);
-	    return vm.compile(list, { op: "cdr", next: next });
-	});
-*/
-	this.env.bindings["DEFINE"] = new PrimitiveOperator(function (form, next) {
+	this.env.bindings["DEFINE"] = new SpecialForm(function (form, next) {
 	    var name = form.get(1);
 	    var value = form.get(2);
 
@@ -207,7 +201,7 @@ var Scheme = function () {
 				next: next
 			      });
 	});
-	this.env.bindings["IF"] = new PrimitiveOperator(function (form, next) {
+	this.env.bindings["IF"] = new SpecialForm(function (form, next) {
 	    var test = form.get(1);
 	    var consequent = form.get(2);
 	    var alternative = form.get(3);
@@ -219,7 +213,7 @@ var Scheme = function () {
 			      }
 			     );
 	});
-	this.env.bindings["LAMBDA"] = new PrimitiveOperator(function (form, next) {
+	this.env.bindings["LAMBDA"] = new SpecialForm(function (form, next) {
 	    var params = form.get(1);
 	    var body = form.get(2);
 
@@ -229,26 +223,11 @@ var Scheme = function () {
 		     next: next
 		   };
 	});
-	/*		this.env.bindings["NOT"] = new PrimitiveOperator(function (form, next) {
-			var arg = form.get(1);
-			return vm.compile(arg, { op: "not",
-			next: next
-			}
-			);
-			});
-	*/
-	this.env.bindings["NULL?"] = new PrimitiveOperator(function (form, next) {
-	    var arg = form.get(1);
-	    return vm.compile(arg, { op: "isnull",
-				     next: next
-				   }
-			     );
-	});
-	this.env.bindings["QUOTE"] = new PrimitiveOperator(function (form, next) {
+	this.env.bindings["QUOTE"] = new SpecialForm(function (form, next) {
 	    var quote = form.get(1);
 	    return { op: 'constant', val: quote, next: next };
 	});
-	this.env.bindings["SET!"] = new PrimitiveOperator(function (form, next) {
+	this.env.bindings["SET!"] = new SpecialForm(function (form, next) {
 	    var name = form.get(1);
 	    var value = form.get(2);
 
