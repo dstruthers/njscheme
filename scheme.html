@@ -30,11 +30,13 @@
                 for (var i = 0; i < parsed.length; i++) {
                     var error = false;
                     try {
+                        var state = Scheme.saveState();
                         var result = Scheme.eval(parsed[i]);
                     }
                     catch (e) {
                         result = e;
                         error = true;
+                        Scheme.restoreState(state);
                     }
                     try {
                         $(codeDiv).after($("<div class=\"result" + (error ? " error" : "") + "\">" + result + "</div>"));
