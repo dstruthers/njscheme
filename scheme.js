@@ -174,6 +174,34 @@ var Scheme = function () {
 	this.env.bindings["NOT"] = createFunction(new List([new Symbol("b")]), "not");
 	this.env.bindings["NULL?"] = createFunction(new List([new Symbol("l")]), "isnull");
 
+	this.env.bindings["AND"] = new SpecialForm(function (form, next) {
+	    var testLength = form.length() - 1;
+	    console.log(testLength);
+	    function comp (i) {
+		if (i === testLength) {
+		    return next;
+		}
+		else {
+		    var n = { op: "test",
+			      consequent: comp(i + 1),
+			      alternative: { op: "constant",
+					     val: new SBoolean(false),
+					     next: next
+					   }
+			    };
+		    return vm.compile(form.get(i + 1), n);
+		}
+	    }
+	    if (testLength > 0) {
+		return comp(0);
+	    }
+	    else {
+		return { op: "constant",
+			 val: new SBoolean(true),
+			 next: next
+		       };
+	    }
+	});
 	this.env.bindings["CALL-WITH-CURRENT-CONTINUATION"] = new SpecialForm(function (form, next) {
 	    var fn = form.get(1);
 	    var compiled = { op: "conti",
@@ -306,6 +334,26 @@ var Scheme = function () {
 		     next: comp(0),
 		     ret: next
 		   };
+	});
+	this.env.bindings["OR"] = new SpecialForm(function (form, next) {
+	    var testLength = form.length() - 1;
+	    console.log(testLength);
+	    function comp (i) {
+		if (i === testLength) {
+		    return { op: "constant",
+			     val: new SBoolean(false),
+			     next: next
+			   };
+		}
+		else {
+		    var n = { op: "test",
+			      consequent: next,
+			      alternative: comp(i + 1)
+			    };
+		    return vm.compile(form.get(i + 1), n);
+		}
+	    }
+	    return comp(0);
 	});
 	this.env.bindings["QUOTE"] = new SpecialForm(function (form, next) {
 	    var quote = form.get(1);
@@ -952,7 +1000,6 @@ var Scheme = function () {
     // list functions
     run("(define length (lambda (l) (if (null? l) 0 (1+ (length (cdr l))))))");
     run("(define map (lambda (f l) (if (null? l) '() (cons (f (car l)) (map f (cdr l))))))");
-    //run("(define filter (lambda (f l) (if (null? l) '() (if (f (car l)) (cons (car l) (filter f (cdr l))) (filter f (cdr l))))))");
     run("(define filter (lambda (f l) (cond ((null? l) '()) ((f (car l)) (cons (car l) (filter f (cdr l)))) (else (filter f (cdr l))))))");
     run("(define take (lambda (n l) (if (zero? n) '() (cons (car l) (take (1- n) (cdr l))))))");
     run("(define drop (lambda (n l) (if (zero? n) l (drop (1- n) (cdr l)))))");
