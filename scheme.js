@@ -223,7 +223,6 @@ var Scheme = function () {
 		     next: next
 		   };
 	});
-/*
 	this.env.bindings["LET"] = new SpecialForm(function (form, next) {
 	    var bindings = form.get(1);
 	    var body = form.get(2);
@@ -232,9 +231,58 @@ var Scheme = function () {
 	    var vals = [];
 	    for (var i = 0; i < bindings.length(); i++) {
 		vars.push(bindings.get(i).get(0));
+		vals.push(bindings.get(i).get(1));
 	    }
+
+	    function comp (i) {
+		if (i === 0) {
+		    return { op: "closure",
+			     vars: new List(vars),
+			     body: vm.compile(body, { op: "return" }),
+			     next: { op: "apply", next: next }
+			   };
+		}
+		else {
+		    return vm.compile(vals[i - 1], { op: "argument", next: comp(i - 1) });
+		}
+	    }
+	    return { op: "frame",
+		     next: comp(bindings.length()),
+		     ret: next
+		   };
 	});
-*/
+	this.env.bindings["LET*"] = new SpecialForm(function (form, next) {
+	    var bindings = form.get(1);
+	    var body = form.get(2);
+
+	    var vars = [];
+	    var vals = [];
+	    for (var i = 0; i < bindings.length(); i++) {
+		vars.push(bindings.get(i).get(0));
+		vals.push(bindings.get(i).get(1));
+	    }
+
+	    function comp (i) {
+		if (i === bindings.length()) {
+		    return vm.compile(body, { op: "return" });
+		}
+		else {
+		    return vm.compile(vals[i], { op: "argument",
+						 next: { op: "closure",
+							 vars: new List([vars[i]]),
+							 body: comp(i + 1),
+						         next: { op: "apply", next: next }
+						       }
+					       }
+				     );
+		}
+	    }
+
+	    return { op: "frame",
+		     next: comp(0),
+		     ret: next
+		   };
+	});
 	this.env.bindings["QUOTE"] = new SpecialForm(function (form, next) {
 	    var quote = form.get(1);
 	    return { op: 'constant', val: quote, next: next };
@@ -666,6 +714,8 @@ var Scheme = function () {
 		continue;
 
 	    default:
+		console.log("Encountered unknown instruction");
+		console.log(inst);
 		throw "Unknown instruction: " + inst.op;
 	    }
 	}
