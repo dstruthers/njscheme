@@ -191,6 +191,30 @@ var Scheme = function () {
 		       };
 	    }
 	});
+	this.env.bindings["COND"] = new SpecialForm(function (form, next) {
+	    var caseLength = form.length() - 1;
+	    function comp (i) {
+		if (i === caseLength) {
+		    return next;
+		}
+		else {
+		    var test = form.get(i + 1).get(0);
+		    var result = form.get(i + 1).get(1);
+
+		    if (test instanceof Symbol && test.toString() === "ELSE") {
+			test = new SBoolean(true);
+		    }
+
+		    return vm.compile(test,
+				      { op: "test",
+					consequent: vm.compile(result, next),
+					alternative: comp(i + 1)
+				      }
+				     );
+		}
+	    }
+	    return comp(0);
+	});
 	this.env.bindings["DEFINE"] = new SpecialForm(function (form, next) {
 	    var name = form.get(1);
 	    var value = form.get(2);
@@ -928,7 +952,8 @@ var Scheme = function () {
     // list functions
     run("(define length (lambda (l) (if (null? l) 0 (1+ (length (cdr l))))))");
     run("(define map (lambda (f l) (if (null? l) '() (cons (f (car l)) (map f (cdr l))))))");
-    run("(define filter (lambda (f l) (if (null? l) '() (if (f (car l)) (cons (car l) (filter f (cdr l))) (filter f (cdr l))))))");
+    //run("(define filter (lambda (f l) (if (null? l) '() (if (f (car l)) (cons (car l) (filter f (cdr l))) (filter f (cdr l))))))");
+    run("(define filter (lambda (f l) (cond ((null? l) '()) ((f (car l)) (cons (car l) (filter f (cdr l)))) (else (filter f (cdr l))))))");
     run("(define take (lambda (n l) (if (zero? n) '() (cons (car l) (take (1- n) (cdr l))))))");
     run("(define drop (lambda (n l) (if (zero? n) l (drop (1- n) (cdr l)))))");
 
@@ -947,6 +972,6 @@ var Scheme = function () {
 	run: run,
 	saveState: saveState,
 	restoreState: restoreState,
-	version: function () { return "njScheme 0.1"; }
+	version: function () { return "njScheme 0.2"; }
     };
 }();
