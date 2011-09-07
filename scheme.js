@@ -1,5 +1,6 @@
 var Scheme = function () {
     const DEBUG = true;
+    const ERR_ARGC = "Wrong number of arguments passed to procedure";
 
     // Built-in Scheme types
 
@@ -69,7 +70,7 @@ var Scheme = function () {
 	    return 1 + this.cdr.length();
 	}
 	else {
-	    return this.car === null ? 0 : 1;
+	    return this.car === null || this.car === undefined ? 0 : 1;
 	}
     };
 
@@ -98,7 +99,7 @@ var Scheme = function () {
 	this.vars = vars;
 	this.body = body;
     }
-    Closure.prototype.toString = function () { return "#[Lexical closure]"; };
+    Closure.prototype.toString = function () { return "#[Compiled procedure]"; };
 
     // Virtual Machine / compilation
     function SpecialForm (fn) {
@@ -134,7 +135,7 @@ var Scheme = function () {
 	    return comp({ op: op, next: { op: "return", next: next } }, 0);
 	}
     }
-    PrimitiveFunction.prototype.toString = function () { return "#[Primitive function]"; };
+    PrimitiveFunction.prototype.toString = function () { return "#[Primitive procedure]"; };
 
     function createFunction (vars, op) {
 	function comp (i) {
@@ -450,9 +451,8 @@ var Scheme = function () {
 		    if (n === undefined) {
 			break;
 		    }
-		    if (!(n instanceof SNumber)) {
-			throw "Cannot add non-numeric term " + n.toString();
-		    }
+		    assert(n instanceof SNumber, "Cannot add non-numeric term: " + n.toString());
+
 		    addAcc += n.value.valueOf();
 		}
 		this.acc = new SNumber(addAcc);
@@ -460,9 +460,10 @@ var Scheme = function () {
 		continue;
 
 	    case "apply":
-		if (!(this.acc instanceof Closure)) {
-		    throw "Cannot apply non-closure object: " + this.acc;
-		}
+		assert(this.acc instanceof Closure, "Object is not applicable: " + this.acc);
+		console.log(this.acc);
+		assert(this.acc.vars.length() === this.args.length, ERR_ARGC);
+
 		var env = new Env(this.acc.env);
 		
 		for (var i = 0; i < this.acc.vars.length(); i++) {
@@ -481,19 +482,18 @@ var Scheme = function () {
 		continue;
 
 	    case "car":
+		assert(this.args.length === 1, ERR_ARGC);
 		var list = this.args.pop();
-		if (!(list instanceof List)) {
-		    throw "Cannot evaluate car of non-list";
-		}
+		assert(list instanceof List, "List expected");
+
 		this.acc = list.car;
 		this.next = inst.next;
 		continue;
 
 	    case "cdr":
 		var list = this.args.pop();
-		if (!(list instanceof List)) {
-		    throw "Cannot evaluate cdr of non-list";
-		}
+		assert(list instanceof List, "List expected");
+
 		if (list.cdr instanceof List) {
 		    this.acc = list.cdr;
 		}
@@ -509,6 +509,7 @@ var Scheme = function () {
 		continue;
 
 	    case "cons":
+		assert(this.args.length === 2, ERR_ARGC);
 		var list = new List();
 		list.car = this.args.pop();
 		list.cdr = this.args.pop();
@@ -566,9 +567,8 @@ var Scheme = function () {
 		    if (n === undefined) {
 			break;
 		    }
-		    if (!(n instanceof SNumber)) {
-			throw "Cannot compare non-numeric term " + n.toString();
-		    }
+		    assert(n instanceof SNumber, "Cannot compare non-numeric term: " + n.toString());
+
 		    if (equalAcc === null) {
 			equalAcc = n.value.valueOf();
 		    }
@@ -606,9 +606,8 @@ var Scheme = function () {
 		    if (n === undefined) {
 			break;
 		    }
-		    if (!(n instanceof SNumber)) {
-			throw "Cannot compare non-numeric term " + n.toString();
-		    }
+		    assert(n instanceof SNumber, "Cannot compare non-numeric term " + n.toString());
+
 		    if (gtAcc === null) {
 			gtAcc = n.value.valueOf();
 		    }
@@ -636,9 +635,8 @@ var Scheme = function () {
 		    if (n === undefined) {
 			break;
 		    }
-		    if (!(n instanceof SNumber)) {
-			throw "Cannot compare non-numeric term " + n.toString();
-		    }
+		    assert(n instanceof SNumber, "Cannot compare non-numeric term " + n.toString());
+
 		    if (ltAcc === null) {
 			ltAcc = n.value.valueOf();
 		    }
@@ -681,6 +679,7 @@ var Scheme = function () {
 		continue;
 
 	    case "modulo":
+		assert(this.args.length === 2, ERR_ARGC);
 		var a = this.args.pop();
 		var b = this.args.pop();
 		this.acc = new SNumber(a.value.valueOf() % b.value.valueOf());
@@ -694,9 +693,8 @@ var Scheme = function () {
 		    if (n === undefined) {
 			break;
 		    }
-		    if (!(n instanceof SNumber)) {
-			throw "Cannot multiply non-numeric term " + n.toString();
-		    }
+		    assert(n instanceof SNumber, "Cannot multiply non-numeric term " + n.toString());
+
 		    multAcc *= n.value.valueOf();
 		}
 		this.acc = new SNumber(multAcc);
@@ -704,6 +702,7 @@ var Scheme = function () {
 		continue;
 
 	    case "not":
+		assert(this.args.length === 1, ERR_ARGC);
 		var arg = this.args.pop();
 		if (!(arg instanceof SBoolean)) {
 		    var result = new SBoolean(false);
@@ -767,9 +766,8 @@ var Scheme = function () {
 		    if (n === undefined) {
 			break;
 		    }
-		    if (!(n instanceof SNumber)) {
-			throw "Cannot subtract non-numeric term " + n.toString();
-		    }
+		    assert(n instanceof SNumber, "Cannot subtract non-numeric term " + n.toString());
+
 		    if (subAcc === null) {
 			subAcc = n.value.valueOf();
 		    }
@@ -879,6 +877,12 @@ var Scheme = function () {
 
 
     // utility functions
+
+    function assert (test, error) {
+	if (!test) {
+	    throw error;
+	}
+    }
 
     function isConstant (atom) {
 	return atom instanceof SString
