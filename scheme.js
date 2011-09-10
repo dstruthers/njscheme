@@ -101,6 +101,20 @@ var Scheme = function () {
     }
     Closure.prototype.toString = function () { return "#[Compiled procedure]"; };
 
+    // Macros
+    function Syntax (keyword, rules) {
+        assert(rules instanceof SyntaxRules, "Argument 2 must be instance of SyntaxRules");
+        this.keyword = keyword;
+        this.rules = rules;
+    }
+    Syntax.prototype.toString = function () { return "#[Syntax]"; };
+
+    function SyntaxRules (form, body) {
+        this.form = form;
+        this.body = body;
+    }
+    SyntaxRules.prototype.toString = function () { return "#[Syntax rules]"; };
+
     // Virtual Machine / compilation
     function SpecialForm (fn) {
         this.fn = fn;
