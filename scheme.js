@@ -123,9 +123,9 @@ var Scheme = function () {
                     }
                     else {
                         return { op: "frame",
-                                ret: next,
-                                next: compiled
-                                };
+                                 ret: next,
+                                 next: compiled
+                               };
                     }
                 }
                 else {
@@ -178,200 +178,200 @@ var Scheme = function () {
         this.env.bindings["NULL?"] = createFunction(new List([new Symbol("l")]), "isnull");
 
         this.env.bindings["AND"] = new SpecialForm(function (form, next) {
-                var testLength = form.length() - 1;
+            var testLength = form.length() - 1;
 
-                function comp (i) {
-                    if (i === testLength) {
-                        return next;
-                    }
-                    else {
-                        var n = { op: "test",
-                                  consequent: comp(i + 1),
-                                  alternative: { op: "constant",
-                                                 val: new SBoolean(false),
-                                                 next: next
-                            }
-                        };
-                        return vm.compile(form.get(i + 1), n);
-                    }
-                }
-                if (testLength > 0) {
-                    return comp(0);
+            function comp (i) {
+                if (i === testLength) {
+                    return next;
                 }
                 else {
-                    return { op: "constant",
-                             val: new SBoolean(true),
-                             next: next
-                    };
+                    var n = { op: "test",
+                              consequent: comp(i + 1),
+                              alternative: { op: "constant",
+                                             val: new SBoolean(false),
+                                             next: next
+                                           }
+                            };
+                    return vm.compile(form.get(i + 1), n);
                 }
-            });
+            }
+            if (testLength > 0) {
+                return comp(0);
+            }
+            else {
+                return { op: "constant",
+                         val: new SBoolean(true),
+                         next: next
+                       };
+            }
+        });
         this.env.bindings["CALL-WITH-CURRENT-CONTINUATION"] = new SpecialForm(function (form, next) {
-                var fn = form.get(1);
-                var compiled = { op: "conti",
-                                 next: { op: "argument",
-                                         next: vm.compile(fn, { op: "apply" })
-                    }
-                };
-                if (next.op === "return") {
-                    return compiled;
+            var fn = form.get(1);
+            var compiled = { op: "conti",
+                             next: { op: "argument",
+                                     next: vm.compile(fn, { op: "apply" })
+                                   }
+                           };
+            if (next.op === "return") {
+                return compiled;
+            }
+            else {
+                return { op: "frame",
+                         ret: next,
+                         next: compiled
+                       };
+            }
+        });
+        this.env.bindings["COND"] = new SpecialForm(function (form, next) {
+            var caseLength = form.length() - 1;
+            function comp (i) {
+                if (i === caseLength) {
+                    return next;
                 }
                 else {
-                    return { op: "frame",
-                             ret: next,
-                             next: compiled
-                    };
-                }
-            });
-        this.env.bindings["COND"] = new SpecialForm(function (form, next) {
-                var caseLength = form.length() - 1;
-                function comp (i) {
-                    if (i === caseLength) {
-                        return next;
-                    }
-                    else {
-                        var test = form.get(i + 1).get(0);
-                        var result = form.get(i + 1).get(1);
+                    var test = form.get(i + 1).get(0);
+                    var result = form.get(i + 1).get(1);
 
-                        if (test instanceof Symbol && test.toString() === "ELSE") {
-                            test = new SBoolean(true);
-                        }
-
-                        return vm.compile(test,
-                                          { op: "test",
-                                                  consequent: vm.compile(result, next),
-                                                  alternative: comp(i + 1)
-                                                  }
-                                          );
+                    if (test instanceof Symbol && test.toString() === "ELSE") {
+                        test = new SBoolean(true);
                     }
+
+                    return vm.compile(test,
+                                      { op: "test",
+                                        consequent: vm.compile(result, next),
+                                        alternative: comp(i + 1)
+                                      }
+                                     );
                 }
-                return comp(0);
-            });
+            }
+            return comp(0);
+        });
         this.env.bindings["DEFINE"] = new SpecialForm(function (form, next) {
-                var name = form.get(1);
-                var value = form.get(2);
+            var name = form.get(1);
+            var value = form.get(2);
 
-                return vm.compile(value,
-        { op: 'define',
-				name: name,
-				next: next
-                });
-            });
-        this.env.bindings["IF"] = new SpecialForm(function (form, next) {
-                var test = form.get(1);
-                var consequent = form.get(2);
-                var alternative = form.get(3);
-
-                return vm.compile(test,
-        { op: "test",
-				consequent: vm.compile(consequent, next),
-				alternative: vm.compile(alternative, next)
-                }
-                                  );
-            });
-        this.env.bindings["LAMBDA"] = new SpecialForm(function (form, next) {
-                var params = form.get(1);
-                var body = form.get(2);
-
-                return { op: "closure",
-                        vars: params,
-                        body: vm.compile(body, { op: "return" }),
-                        next: next
-                        };
-            });
-        this.env.bindings["LET"] = new SpecialForm(function (form, next) {
-                var bindings = form.get(1);
-                var body = form.get(2);
-
-                var vars = [];
-                var vals = [];
-                for (var i = 0; i < bindings.length(); i++) {
-                    vars.push(bindings.get(i).get(0));
-                    vals.push(bindings.get(i).get(1));
-                }
-
-                function comp (i) {
-                    if (i === 0) {
-                        return { op: "closure",
-                                 vars: new List(vars),
-                                 body: vm.compile(body, { op: "return" }),
-                                 next: { op: "apply", next: next }
-                        };
-                    }
-                    else {
-                        return vm.compile(vals[i - 1], { op: "argument", next: comp(i - 1) });
-                    }
-                }
-                return { op: "frame",
-                         next: comp(bindings.length()),
-                         ret: next
-                };
-            });
-        this.env.bindings["LET*"] = new SpecialForm(function (form, next) {
-                var bindings = form.get(1);
-                var body = form.get(2);
-
-                var vars = [];
-                var vals = [];
-                for (var i = 0; i < bindings.length(); i++) {
-                    vars.push(bindings.get(i).get(0));
-                    vals.push(bindings.get(i).get(1));
-                }
-
-                function comp (i) {
-                    if (i === bindings.length()) {
-                        return vm.compile(body, { op: "return" });
-                    }
-                    else {
-                        return vm.compile(vals[i], { op: "argument",
-                                                     next: { op: "closure",
-                                                             vars: new List([vars[i]]),
-                                                             body: comp(i + 1),
-                                                             next: { op: "apply", next: next }
-                                }
-                            }
-                            );
-                    }
-                }
-
-                return { op: "frame",
-                         next: comp(0),
-                         ret: next
-                };
-            });
-        this.env.bindings["OR"] = new SpecialForm(function (form, next) {
-                var testLength = form.length() - 1;
-
-                function comp (i) {
-                    if (i === testLength) {
-                        return { op: "constant",
-                                val: new SBoolean(false),
+            return vm.compile(value,
+                              { op: 'define',
+                                name: name,
                                 next: next
-                                };
-                    }
-                    else {
-                        var n = { op: "test",
-                                  consequent: next,
-                                  alternative: comp(i + 1)
-                        };
-                        return vm.compile(form.get(i + 1), n);
-                    }
-                }
-                return comp(0);
-            });
-        this.env.bindings["QUOTE"] = new SpecialForm(function (form, next) {
-                var quote = form.get(1);
-                return { op: 'constant', val: quote, next: next };
-            });
-        this.env.bindings["SET!"] = new SpecialForm(function (form, next) {
-                var name = form.get(1);
-                var value = form.get(2);
+                              });
+        });
+        this.env.bindings["IF"] = new SpecialForm(function (form, next) {
+            var test = form.get(1);
+            var consequent = form.get(2);
+            var alternative = form.get(3);
 
-                return vm.compile(value,
-        { op: 'set',
-				name: name,
-				next: next
-                });
-            });
+            return vm.compile(test,
+                              { op: "test",
+                                consequent: vm.compile(consequent, next),
+                                alternative: vm.compile(alternative, next)
+                              }
+                             );
+        });
+        this.env.bindings["LAMBDA"] = new SpecialForm(function (form, next) {
+            var params = form.get(1);
+            var body = form.get(2);
+
+            return { op: "closure",
+                     vars: params,
+                     body: vm.compile(body, { op: "return" }),
+                     next: next
+                   };
+        });
+        this.env.bindings["LET"] = new SpecialForm(function (form, next) {
+            var bindings = form.get(1);
+            var body = form.get(2);
+
+            var vars = [];
+            var vals = [];
+            for (var i = 0; i < bindings.length(); i++) {
+                vars.push(bindings.get(i).get(0));
+                vals.push(bindings.get(i).get(1));
+            }
+
+            function comp (i) {
+                if (i === 0) {
+                    return { op: "closure",
+                             vars: new List(vars),
+                             body: vm.compile(body, { op: "return" }),
+                             next: { op: "apply", next: next }
+                           };
+                }
+                else {
+                    return vm.compile(vals[i - 1], { op: "argument", next: comp(i - 1) });
+                }
+            }
+            return { op: "frame",
+                     next: comp(bindings.length()),
+                     ret: next
+                   };
+        });
+        this.env.bindings["LET*"] = new SpecialForm(function (form, next) {
+            var bindings = form.get(1);
+            var body = form.get(2);
+
+            var vars = [];
+            var vals = [];
+            for (var i = 0; i < bindings.length(); i++) {
+                vars.push(bindings.get(i).get(0));
+                vals.push(bindings.get(i).get(1));
+            }
+
+            function comp (i) {
+                if (i === bindings.length()) {
+                    return vm.compile(body, { op: "return" });
+                }
+                else {
+                    return vm.compile(vals[i], { op: "argument",
+                                                 next: { op: "closure",
+                                                         vars: new List([vars[i]]),
+                                                         body: comp(i + 1),
+                                                         next: { op: "apply", next: next }
+                                                       }
+                                               }
+                                     );
+                }
+            }
+
+            return { op: "frame",
+                     next: comp(0),
+                     ret: next
+                   };
+        });
+        this.env.bindings["OR"] = new SpecialForm(function (form, next) {
+            var testLength = form.length() - 1;
+
+            function comp (i) {
+                if (i === testLength) {
+                    return { op: "constant",
+                             val: new SBoolean(false),
+                             next: next
+                           };
+                }
+                else {
+                    var n = { op: "test",
+                              consequent: next,
+                              alternative: comp(i + 1)
+                            };
+                    return vm.compile(form.get(i + 1), n);
+                }
+            }
+            return comp(0);
+        });
+        this.env.bindings["QUOTE"] = new SpecialForm(function (form, next) {
+            var quote = form.get(1);
+            return { op: 'constant', val: quote, next: next };
+        });
+        this.env.bindings["SET!"] = new SpecialForm(function (form, next) {
+            var name = form.get(1);
+            var value = form.get(2);
+
+            return vm.compile(value,
+                              { op: 'set',
+                                name: name,
+                                next: next
+                              });
+        });
     }
     VirtualMachine.prototype.compile = function (form, next) {
         if (form instanceof List) {
@@ -389,7 +389,7 @@ var Scheme = function () {
                     // from the lookup call above
                 }
             }
-	    
+            
             // otherwise assume application
             var argCount = form.length() - 1;
             var vm = this;
@@ -401,9 +401,9 @@ var Scheme = function () {
                     }
                     else {
                         return { op: "frame",
-                                ret: next,
-                                next: compiled
-                                };
+                                 ret: next,
+                                 next: compiled
+                               };
                     }
                 }
                 else {
@@ -417,13 +417,13 @@ var Scheme = function () {
             return { op: "constant",
                      val: form,
                      next: next
-            };
+                   };
         }
         else if (form instanceof Symbol) {
             return { op: "lookup",
                      name: form,
                      next: next
-            };
+                   };
         }
         else {
             throw "Error during compilation";
@@ -466,7 +466,7 @@ var Scheme = function () {
                 assert(this.acc.vars.length() === this.args.length, ERR_ARGC);
 
                 var env = new Env(this.acc.env);
-		
+                
                 for (var i = 0; i < this.acc.vars.length(); i++) {
                     var varName = this.acc.vars.get(i).toString();
                     var varVal = this.args.pop();
@@ -528,9 +528,9 @@ var Scheme = function () {
                 this.acc = new Closure(new Env(),
                                        new List(vars),
                                        { op: "nuate",
-                                               name: vars[0].toString(),
-                                               stack: this.stack
-                                               });
+                                         name: vars[0].toString(),
+                                         stack: this.stack
+                                       });
                 this.next = inst.next;
                 continue;
 
@@ -594,7 +594,7 @@ var Scheme = function () {
                                env: this.env,
                                args: this.args,
                                stack: this.stack
-                };
+                             };
                 this.args = [];
                 this.next = inst.next;
                 continue;
@@ -842,7 +842,7 @@ var Scheme = function () {
 
             case "test":
                 this.next = isTrue(this.acc) ? inst.consequent : inst.alternative;
-            continue;
+                continue;
 
             default:
                 console.log("Encountered unknown instruction");
@@ -866,19 +866,19 @@ var Scheme = function () {
     function tokenize (code) {
         var matches = null;
         var token_types = [
-                           [CommentToken,          /^(;[^\n]*)/              ],
-                           [SExpressionBeginToken, /^(\()/                   ],
-                           [SExpressionEndToken,   /^(\))/                   ],
-                           [VectorBeginToken,      /^(#\()/                  ],
-                           [QuoteToken,            /^(\')/                   ],
-                           [QuasiQuoteToken,       /^(`)/                    ],
-                           [UnquoteSplicingToken,  /^(,@)/                   ],
-                           [UnquoteToken,          /^(,)/                    ],
-                           [SString,               /^\"((?:[^\"\\]|\\.)*)\"/ ],
-                           [SBoolean,              /^(#[tf]{1})([\s\n\(\)])/i          ],
-                           [SNumber,               /^([\+\-]?(?:[0-9]+(?:\.[0-9]*)?|\.[0-9]+))([\s\n\(\)])/],
-                           [Symbol,                /^([^\(\)\[\]\"\s]+)/     ]
-                           ];
+            [CommentToken,          /^(;[^\n]*)/              ],
+            [SExpressionBeginToken, /^(\()/                   ],
+            [SExpressionEndToken,   /^(\))/                   ],
+            [VectorBeginToken,      /^(#\()/                  ],
+            [QuoteToken,            /^(\')/                   ],
+            [QuasiQuoteToken,       /^(`)/                    ],
+            [UnquoteSplicingToken,  /^(,@)/                   ],
+            [UnquoteToken,          /^(,)/                    ],
+            [SString,               /^\"((?:[^\"\\]|\\.)*)\"/ ],
+            [SBoolean,              /^(#[tf]{1})([\s\n\(\)])/i          ],
+            [SNumber,               /^([\+\-]?(?:[0-9]+(?:\.[0-9]*)?|\.[0-9]+))([\s\n\(\)])/],
+            [Symbol,                /^([^\(\)\[\]\"\s]+)/     ]
+        ];
 
         code = code.replace(/^[\s\n]*/, "") + " ";
         for (var i = 0; i < token_types.length; i++) {
@@ -896,8 +896,8 @@ var Scheme = function () {
 
     function parse (tokens) {
         var limit = arguments.length > 1
-        ? arguments[1]
-        : -1;
+            ? arguments[1]
+            : -1;
 
         if (tokens.length === 0 || limit === 0) {
             return [];
@@ -947,8 +947,8 @@ var Scheme = function () {
 
     function isConstant (atom) {
         return atom instanceof SString
-	    || atom instanceof SNumber
-	    || atom instanceof SBoolean;
+            || atom instanceof SNumber
+            || atom instanceof SBoolean;
     }
 
     function isTrue (atom) {
