@@ -73,6 +73,20 @@ var Scheme = function () {
             return this.car === null || this.car === undefined ? 0 : 1;
         }
     };
+    List.prototype.toArray = function () {
+        if (this.length() === 0) {
+            return [];
+        }
+        else {
+            var a = [this.car];
+            if (this.cdr instanceof List) {
+                return a.concat(this.cdr.toArray());
+            }
+            else {
+                return a;
+            }
+        }
+    };
 
     // Environment
 
@@ -108,10 +122,54 @@ var Scheme = function () {
         this.rules = rules;
     }
     Syntax.prototype.toString = function () { return "#[Syntax]"; };
+    Syntax.prototype.match = function (form, pattern, identifiers, patternBindings) {
+        function isIdentifier (sym) {
+            for (var i = 0; i < identifiers.length(); i++) {
+                if (sym.toString() === identifiers.get(i).toString()) {
+                    return true;
+                }
+            }
+            return false;
+        }
 
-    function SyntaxRules (form, body) {
-        this.form = form;
-        this.body = body;
+        var patternForm = pattern.get(0)
+        console.log("Trying macro pattern");
+        console.log(patternForm.toString());
+        console.log(form.toString());
+
+        var patternPos = 0;
+
+        for (var formPos = 0; formPos < form.length(); formPos++) {
+            var patternVal = patternForm.get(patternPos);
+            var formVal = form.get(formPos);
+
+            if (patternVal instanceof Symbol && isIdentifier(patternVal)) {
+                if (!(formVal instanceof Symbol && formVal.toString() === patternVal.toString())) {
+                    return false;
+                }
+                patternPos++;
+                continue;
+            }
+            else if (patternVal instanceof Symbol) {
+                patternBindings[patternVal.toString()] = formVal;
+            }
+        }
+    };
+    Syntax.prototype.transform = function (form) {
+        console.log("Generating identifiers");
+        var identifiers = new List([this.keyword].concat(this.rules.identifiers.toArray()));
+        for (var i = 0; i < this.rules.patterns.length(); i++) {
+            if (this.match(form, this.rules.patterns.get(i), identifiers, {})) {
+                // transform and return new form
+            }
+        }
+        // failure
+        return new SBoolean(false);
+    };
+
+    function SyntaxRules (identifiers, patterns) {
+        this.identifiers = identifiers;
+        this.patterns = patterns;
     }
     SyntaxRules.prototype.toString = function () { return "#[Syntax rules]"; };
 
@@ -270,6 +328,16 @@ var Scheme = function () {
                                 next: next
                               });
         });
+        this.env.bindings["DEFINE-SYNTAX"] = new SpecialForm(function (form, next) {
+            var keyword = form.get(1);
+            var rules = form.get(2);
+
+            return vm.compile(rules,
+                              { op: "define-syntax",
+                                keyword: keyword,
+                                next: next
+                              });
+        });
         this.env.bindings["IF"] = new SpecialForm(function (form, next) {
             var test = form.get(1);
             var consequent = form.get(2);
@@ -386,6 +454,19 @@ var Scheme = function () {
                                 next: next
                               });
         });
+        this.env.bindings["SYNTAX-RULES"] = new SpecialForm(function (form, next) {
+            var identifiers = form.get(1);
+            var patterns = [];
+            for (var i = 2; i < form.length(); i++) {
+                patterns[patterns.length] = form.get(i);
+            }
+
+            return { op: "syntax-rules",
+                     identifiers: identifiers,
+                     patterns: new List(patterns),
+                     next: next
+                   };
+        });
     }
     VirtualMachine.prototype.compile = function (form, next) {
         if (form instanceof List) {
@@ -394,6 +475,9 @@ var Scheme = function () {
             if (fn instanceof Symbol) {
                 try {
                     var fnBinding = this.env.lookup(fn.toString());
+                    if (fnBinding instanceof Syntax) {
+                        return this.compile(fnBinding.transform(form), next);
+                    }
                     if (isApplicable(fnBinding)) {
                         return fnBinding.fn(form, next);
                     }
@@ -550,6 +634,12 @@ var Scheme = function () {
 
             case "define":
                 this.env.bindings[inst.name] = this.acc;
+                this.next = inst.next;
+                continue;
+
+            case "define-syntax":
+                this.acc = new Syntax(inst.keyword, this.acc);
+                this.env.bindings[inst.keyword] = this.acc;
                 this.next = inst.next;
                 continue;
 
@@ -851,6 +941,14 @@ var Scheme = function () {
                     }
                 }
                 this.acc = new SNumber(subAcc);
+                this.next = inst.next;
+                continue;
+
+            case "syntax-rules":
+                var identifiers = inst.identifiers;
+                var patterns = inst.patterns;
+
+                this.acc = new SyntaxRules(identifiers, patterns);
                 this.next = inst.next;
                 continue;
 
