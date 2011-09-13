@@ -7,6 +7,20 @@
 #results { font-weight: bold; font-family: Courier New, monospace; }
 .input { color: #777; }
 .error { color: #f44; }
+#help {
+    font-family: Helvetica, Arial, sans-serif;
+    font-size: 10pt;
+    color: #000;
+    background-color: #ddd;
+    padding: 5px;
+    border: outset 1px #777;
+    position: absolute;
+    top: 5px;
+    right: 5px;
+    width: 500px;
+}
+#help .controls { margin-top: 0; }
+#help .controls #close-link { text-decoration: none; }
     </style>
     <script src="scheme.js"></script>
     <script src="jquery-1.6.2.min.js"></script>
@@ -36,14 +50,41 @@
             }
             return false;
         });
+
+        $("#scheme-version").html(Scheme.version());
+        $("#close-link").click(function () {
+            $("#help").css("display", "none");
+            return false;
+        });
     });
     </script>
   </head>
   <body>
     <form id="repl">
-    <input id="prompt" type="text" style="width: 400px;" /><input type="submit" value="Eval"/>
+      <input id="prompt" type="text" style="width: 400px;" /><input type="submit" value="Eval"/>
     </form>
+
     <div id="results">
+    </div>
+
+    <div id="help">
+      <p class="controls"><a href="#" id="close-link">[ Close ]</a></p>
+      <p>This is <span id="scheme-version"></span>. Type scheme code into the input area to the left. Here are some examples:</p>
+      <p>
+        <code>
+          <strong>(define square (lambda (x) (* x x)))<br/>
+          (square 5)</strong><br/>
+          <em>&gt;&gt; 25</em><br/><br/>
+          <strong>(filter odd? (range 1 10))</strong><br/>
+          <em>&gt;&gt; (1 3 5 7 9)</em><br/><br/>
+          <strong>(map (lambda (x) (* x 10)) (range 1 5))</strong><br />
+          <em>&gt;&gt; (10 20 30 40 50)</em><br/><br/>
+          <strong>(take 3 '(cat dog fox rabbit mouse))</strong><br/>
+          <em>&gt;&gt; (CAT DOG FOX)</em><br/><br/>
+          <strong>(call/cc (lambda (cc) (begin 1 2 (cc 42) 3)))</strong><br/>
+          <em>&gt;&gt; 42</em>
+        </code>
+      </p>
     </div>
   </body>
 </html>
